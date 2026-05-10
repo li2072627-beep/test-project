@@ -1,1 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商家點餐 SPA 美團風格 + 配送倒計時</title>
+<style>
+body { font-family: 'Helvetica Neue', Arial, sans-serif; margin:0; padding:0; background:#f5f5f5; }
+.container { max-width:480px; margin:auto; padding-bottom:120px; }
+h1 { text-align:center; color:#ff4d4f; margin:20px 0; font-size:26px; }
 
+/* 步驟頁面 */
+.step { display:none; margin-top:20px; opacity:0; transform:translateY(20px); transition:all 0.3s ease; }
+.step.active { display:block; opacity:1; transform:translateY(0); }
+
+/* 商品卡片 */
+.product { background:#fff; border-radius:12px; padding:10px; display:flex; align-items:center; margin:10px; box-shadow:0 4px 12px rgba(0,0,0,0.1); transition: transform 0.2s; }
+.product:hover { transform: translateY(-2px); }
+.product img { width:70px; height:70px; object-fit:cover; border-radius:12px; cursor:pointer; }
+.product-info { flex:1; margin-left:12px; display:flex; flex-direction:column; }
+.product-name { font-weight:bold; font-size:16px; margin-bottom:4px; cursor:pointer; }
+.product-desc { font-size:13px; color:#666; margin-bottom:6px; }
+.product-price { color:#ff4d4f; font-weight:bold; font-size:16px; margin-bottom:6px; }
+.qty-controls { display:flex; align-items:center; gap:5px; }
+.qty-controls button { width:32px; height:32px; font-size:18px; border:none; border-radius:6px; background:linear-gradient(90deg,#ff4d4f,#ff7a65); color:#fff; cursor:pointer; transition:0.2s; }
+.qty-controls button:hover { transform:scale(1.1); }
+.qty-controls span { width:36px; text-align:center; font-weight:bold; }
+
+/* 底部固定欄 */
+.bottom-bar { position:fixed; bottom:0; left:0; width:100%; max-width:480px; display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:#fff; box-shadow:0 -4px 12px rgba(0,0,0,0.15); border-top-left-radius:12px; border-top-right-radius:12px; }
+.bottom-bar .total { font-size:18px; font-weight:bold; color:#ff4d4f; }
+.bottom-bar button { padding:10px 20px; background:linear-gradient(90deg,#ff4d4f,#ff7a65); border:none; border-radius:8px; color:#fff; font-weight:bold; cursor:pointer; transition:0.2s; }
+.bottom-bar button:hover { transform:scale(1.05); }
+
+/* Modal */
+.modal { display:none; position:fixed; z-index:10; left:0; top:0; width:100%; height:100%; overflow:auto; background-color: rgba(0,0,0,0.5);}
+.modal-content { background-color:#fff; margin:12% auto; padding:20px; border-radius:16px; width:85%; max-width:400px; position:relative; box-shadow:0 8px 20px rgba(0,0,0,0.25); transform:scale(0.9); transition:0.3s; }
+.modal.active .modal-content { transform:scale(1); }
+.close { position:absolute; right:12px; top:12px; font-size:22px; cursor:pointer; color:#999; }
+.modal img { width:100%; border-radius:12px; margin-bottom:12px; }
+.modal h3 { font-size:18px; margin-bottom:8px; }
+.modal p { font-size:14px; color:#555; margin-bottom:12px; }
+
+/* 訂單確認卡片 */
+.cart-summary { margin:10px; }
+.cart-item { background:#fff; border-radius:12px; padding:10px; display:flex; align-items:center; margin-bottom:10px; box-shadow:0 4px 12px rgba(0,0,0,0.08); transition:0.2s; }
+.cart-item img { width:60px; height:60px; object-fit:cover; border-radius:12px; margin-right:10px; }
+.cart-item-info { flex:1; display:flex; flex-direction:column; justify-content:space-between; }
+.cart-item-info .name { font-weight:bold; font-size:15px; }
+.cart-item-info .qty-controls { display:flex; align-items:center; gap:5px; margin-top:4px; }
+.cart-item-info .qty-controls button { width:28px; height:28px; font-size:16px; border-radius:6px; background:linear-gradient(90deg,#ff4d4f,#ff7a65); color:#fff; cursor:pointer; transition:0.2s; }
+.cart-item-info .qty-controls button:hover { transform:scale(1.1); }
+.total-summary { text-align:right; font-weight:bold; font-size:18px; margin:10px; color:#ff4d4f; }
+
+/* 表單 */
+input[type="text"], select { width:100%; padding:10px; margin:5px 0 15px; border:1px solid #ccc; border-radius:8px; font-size:14px; }
+#payBtn, .backBtn { width:100%; padding:12px; margin-top:10px; background:linear-gradient(90deg,#ff4d4f,#ff7a65); color:#fff; border:none; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; transition:0.2s; }
+#payBtn:hover, .backBtn:hover { transform:scale(1.05); }
+.countdown { font-weight:bold; color:#ff4d4f; margin-left:10px; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>商家點餐</h1>
+
+<!-- 步驟1: 商品 -->
+<div id="step1" class="step active">
+  <div id="products"></div>
+</div>
+
+<!-- 步驟2: 地址 -->
+<div id="step2" class="step">
+  <h2 style="text-align:center; margin-bottom:12px;">填寫收貨資訊</h2>
+  <input type="text" id="name" placeholder="收貨人姓名" required>
+  <input type="text" id="phone" placeholder="手機號碼" required>
+  <input type="text" id="address" placeholder="詳細地址" required>
+  <select id="deliveryTime" required>
+    <option value="立即送達">立即送達</option>
+    <option value="預約送達">預約送達</option>
+  </select>
+  <button class="backBtn" onclick="showStep(1)">← 返回商品頁</button>
+  <button onclick="goToConfirm()">下一步確認訂單</button>
+</div>
+
+<!-- 步驟3: 確認訂單 -->
+<div id="step3" class="step">
+  <h2 style="text-align:center; margin-bottom:12px;">確認訂單</h2>
+  <div id="orderSummary" class="cart-summary"></div>
+  <div class="total-summary" id="orderTotal"></div>
+  <div>配送時間: <span id="confirmDeliveryTime"></span> <span class="countdown" id="deliveryCountdown"></span></div>
+  <button class="backBtn" onclick="showStep(2)">← 返回填寫地址</button>
+  <button id="payBtn" onclick="payOrder()">聯絡客服付款</button>
+</div>
+
+<!-- Modal -->
+<div id="modal" class="modal">
+<div class="modal-content">
+<span class="close" onclick="closeModal()">&times;</span>
+<img id="modalImg" src="">
+<h3 id="modalName"></h3>
+<p id="modalDesc"></p>
+<div class="qty-controls">
+<button onclick="changeModalQty(-1)">−</button>
+<span id="modalQty">0</span>
+<button onclick="changeModalQty(1)">＋</button>
+</div>
+</div>
+</div>
+
+<!-- 底部固定欄 -->
+<div class="bottom-bar">
+  <div class="total" id="totalAmount">總金額: $0</div>
+  <button onclick="nextStep()">下一步</button>
+</div>
+
+<script>
+// ===== 資料與狀態 =====
+const productsData=[
+{id:1,name:"紅燒牛肉麵",price:120,img:"https://i.imgur.com/T8V5fCg.jpg",desc:"香濃紅燒牛肉湯，Q彈麵條，配上嫩牛肉。"},
+{id:2,name:"炸雞套餐",price:150,img:"https://i.imgur.com/1Lk0YMo.jpg",desc:"酥脆炸雞搭配薯條和飲料，滿足你的口腹之慾。"},
+{id:3,name:"珍珠奶茶",price:50,img:"https://i.imgur.com/2yF2Ioj.jpg",desc:"香甜奶茶配上Q彈珍珠，口感絕佳。"}
+];
+let order=[];
+let modalProduct=null;
+let countdownInterval=null;
+
+// ===== 初始化商品 =====
+const productsContainer=document.getElementById('products');
+productsData.forEach(p=>{
+  const div=document.createElement('div');
+  div.className='product';
+  div.innerHTML=`
+    <img src="${p.img}" onclick="openModal(${p.id})">
+    <div class="product-info">
+      <div class="product-name" onclick="openModal(${p.id})">${p.name}</div>
+      <div class="product-desc">${p.desc}</div>
+      <div class="product-price">$${p.price}</div>
+      <div class="qty-controls">
+        <button onclick="changeQty(event,${p.id},-1)">−</button>
+        <span id="qty-${p.id}">0</span>
+        <button onclick="changeQty(event,${p.id},1)">＋</button>
+      </div>
+    </div>`;
+  productsContainer.appendChild(div);
+});
+
+// ===== 函數 =====
+function changeQty(e,id,delta){
+  if(e) e.stopPropagation();
+  const idx=order.findIndex(o=>o.id===id);
+  let qty=idx>=0?order[idx].qty+delta:delta;
+  if(qty<0) qty=0;
+  if(idx>=0){ if(qty===0) order.splice(idx,1); else order[idx].qty=qty; }
+  else if(qty>0){ const p=productsData.find(p=>p.id===id); order.push({...p,qty}); }
+  document.getElementById(`qty-${id}`).innerText=qty;
+  if(modalProduct && modalProduct.id===id) document.getElementById('modalQty').innerText=qty;
+  if(document.getElementById(`qty-confirm-${id}`)) document.getElementById(`qty-confirm-${id}`).innerText=qty;
+  generateOrderSummary();
+  updateTotal();
+}
+
+function openModal(id){
+  modalProduct=productsData.find(p=>p.id===id);
+  const ex=order.find(o=>o.id===id);
+  document.getElementById('modalImg').src=modalProduct.img;
+  document.getElementById('modalName').innerText=modalProduct.name;
+  document.getElementById('modalDesc').innerText=modalProduct.desc;
+  document.getElementById('modalQty').innerText=ex?ex.qty:0;
+  document.getElementById('modal').style.display='block';
+}
+function closeModal(){ document.getElementById('modal').style.display='none'; modalProduct=null; }
+function changeModalQty(delta){ if(!modalProduct) return; changeQty(null,modalProduct.id,delta); }
+
+function updateTotal(){ let total=0; order.forEach(item=>total+=item.price*item.qty); document.getElementById('totalAmount').innerText=`總金額: $${total}`; }
+
+function nextStep(){ if(order.length===0){ alert('請至少選擇一件商品'); return; } showStep(2); }
+
+function goToConfirm(){
+  const name=document.getElementById('name').value.trim();
+  const phone=document.getElementById('phone').value.trim();
+  const address=document.getElementById('address').value.trim();
+  if(!name || !phone || !address){ alert('請完整填寫收貨資訊'); return; }
+  document.getElementById('confirmDeliveryTime').innerText=document.getElementById('deliveryTime').value;
+  showStep(3);
+  generateOrderSummary();
+  startCountdown();
+}
+
+function showStep(step){ document.querySelectorAll('.step').forEach(s=>s.classList.remove('active')); document.getElementById('step'+step).classList.add('active'); }
+
+function generateOrderSummary(){
+  const container=document.getElementById('orderSummary');
+  container.innerHTML='';
+  let total=0;
+  order.forEach(item=>{
+    total+=item.price*item.qty;
+    const div=document.createElement('div');
+    div.className='cart-item';
+    div.innerHTML=`
+      <img src="${item.img}">
+      <div class="cart-item-info">
+        <div class="name">${item.name}</div>
+        <div class="qty-controls">
+          <button onclick="changeQty(event,${item.id},-1)">−</button>
+          <span id="qty-confirm-${item.id}">${item.qty}</span>
+          <button onclick="changeQty(event,${item.id},1)">＋</button>
+          <span style="margin-left:10px;">$${item.price} x ${item.qty} = ${item.price*item.qty}元</span>
+        </div>
+      </div>`;
+    container.appendChild(div);
+  });
+  document.getElementById('orderTotal').innerText=`總金額: $${total}`;
+}
+
+// ===== 配送倒計時 =====
+function startCountdown(){
+  clearInterval(countdownInterval);
+  const type=document.getElementById('deliveryTime').value;
+  let seconds=type==='立即送達'?20*60:60*60; // 立即送達 20 分鐘, 預約送達 60 分鐘
+  const countdownEl=document.getElementById('deliveryCountdown');
+  countdownEl.innerText=formatCountdown(seconds);
+  countdownInterval=setInterval(()=>{
+    seconds--;
+    if(seconds<0){ clearInterval(countdownInterval); countdownEl.innerText='已送達'; return; }
+    countdownEl.innerText=formatCountdown(seconds);
+  },1000);
+}
+function formatCountdown(sec){
+  const m=Math.floor(sec/60);
+  const s=sec%60;
+  return `預計送達: ${m}分${s}秒`;
+}
+
+function payOrder(){
+  alert('已提交訂單，客服將與您聯繫付款！');
+}
+</script>
+</body>
+</html>
